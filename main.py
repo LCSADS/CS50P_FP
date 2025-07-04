@@ -2,6 +2,7 @@ from pytubefix import YouTube
 from time import sleep
 import sys
 import os
+import subprocess
 def main():
     while True:
         youtube_url = get_video_url()
@@ -28,12 +29,11 @@ def main():
             break
         else:
             print("Ok, let's start again.")
-    chosen_file = video_resolution_choice(yt_object,chosen_format)
-    download_file(chosen_file)
-    
-
-
-
+    streams = get_download_streams(yt_object,chosen_format)
+    chosen_file = options_and_choice(streams,chosen_format)
+    file_path = download_file(chosen_file)
+    if chosen_format == 'audio':
+        convert_to_mp3(file_path)
 
 
 def get_video_url():
@@ -43,10 +43,6 @@ def get_video_url():
             return url
         else:
             print("Invalid URL. Make sure it's a safe URL that starts with 'https://' ")
-
-# download video
-
-# allow user to choose mp3 or mp4
 
 def ask_format():
     while True:
@@ -60,26 +56,34 @@ def ask_format():
         else:
             print("Please choose a valid option.")
 
-
-# choose quality
-# the youtube object generates stream objects inside of it, listed inside another object, streamquery
-# manipulating the stream obj inside streamquery obj enables me to use methods like .download and atributes like filesize
-def video_resolution_choice(yt_object,chosen_format):
+def get_download_streams(yt_object,chosen_format):
     if chosen_format == 'video':
         # streamquery here                    filter audio+video files                order by decreasing resolution                        
         download_formats = yt_object.streams.filter(progressive=True,file_extension="mp4").order_by("resolution").desc()
-# in case there's only one download option avaible
-        if len(download_formats) == 1:
-            print(f"Only one option avaible: {download_formats[0].resolution}")
-            chosen_file = download_formats[0]
-            return chosen_file
-# in case there are multiple avaible options for the user to select. Iterates over the list, returns the video choice. While loop for catching errors and better ux.
-        else:
-            print("Avaible options for download: ")
-            for i, video in enumerate(download_formats, start=1):
-                print(f"[{i}]{video.resolution} - {round(video.filesize / (1024*1024), 2)} MB")
+    elif chosen_format == 'audio':
+# abr orders by bitrates, descending order(most bitrates first, best quality first)
+        download_formats = yt_object.streams.filter(only_audio=True).order_by("abr").desc()
+    return download_formats
 
-            while True:
+def options_and_choice(download_formats,chosen_format):
+    if len(download_formats) == 1:
+            if chosen_format == 'video':
+                print(f"Only one option available: {download_formats[0].resolution}")
+                chosen_file = download_formats[0]
+                return chosen_file
+            else:
+                print(f"Only one option available : {download_formats[0].abr}")
+                chosen_file = download_formats[0]
+                return chosen_file
+    elif chosen_format == 'video':
+        print("Available options for download: ")
+        for i, video in enumerate(download_formats, start=1):
+            print(f"[{i}]{video.resolution} - {bytes_to_mb(video.filesize)} MB")
+    elif chosen_format =='audio':
+        print("Available options for download: ")
+        for i, audio, in enumerate(download_formats, start=1):
+            print(f"{i}{audio.abr} - {bytes_to_mb(audio.filesize)} MB")
+    while True:
                 try:
                     user_choice = int(input("Type the corresponding number to select a resolution."))
                     if user_choice in range(1,len(download_formats)+1):
@@ -89,21 +93,32 @@ def video_resolution_choice(yt_object,chosen_format):
                         print("Please type the corresponding number with the option you want to select.")
                 except ValueError:
                     print("Please type a valid number")
-        return chosen_file
-    
+    return chosen_file
+
 def download_file(chosen_file):
     os.makedirs("downloads",exist_ok=True)
     print("Please wait",end='',flush=True)
-    for _ in range(3):
+    for _ in range(5):
         sleep(0.5)
         print(".",end='',flush=True)
-    chosen_file.download(output_path="downloads")
+    output_path = chosen_file.download(output_path="downloads")
     print("\nDownload completed.")
+    return output_path
 
-        
+def bytes_to_mb(size_in_bytes):
+    return round(size_in_bytes / (1024 * 1024), 2)
 
-    
+def convert_to_mp3(input_path):
+    if not input_path.endswith(".m4a"):
+        return input_path
+    output_path = input_path.replace(".m4a",".mp3")
+    try:
+        subprocess.run(["ffmpeg","-y","-i",input_path,"-acodec","libmp3lame",output_path],check=True)
+        os.remove(input_path)
+        print("MP3 conversion sucessfull.")
+    except subprocess.CalledProcessError:
+        print("Error in the conversion")
+        return input_path    
 
-# transcribe audio
 
 main()
