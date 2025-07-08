@@ -3,6 +3,8 @@ from time import sleep
 import sys
 import os
 import subprocess
+import whisper
+import torch
 def main():
     while True:
         youtube_url = get_video_url()
@@ -33,7 +35,13 @@ def main():
     chosen_file = options_and_choice(streams,chosen_format)
     file_path = download_file(chosen_file)
     if chosen_format == 'audio':
-        convert_to_mp3(file_path)
+        file_path = convert_to_mp3(file_path)
+        model = whisper_model("small")
+        transcription = audio_transcriber(model,file_path,language="pt")
+        print(transcription)
+        with open(file_path.replace(".mp3",".txt"),"w", encoding="utf-8") as text:
+            text.write(transcription)
+        print ("transcription sucessfull")
 
 
 def get_video_url():
@@ -81,8 +89,8 @@ def options_and_choice(download_formats,chosen_format):
             print(f"[{i}]{video.resolution} - {bytes_to_mb(video.filesize)} MB")
     elif chosen_format =='audio':
         print("Available options for download: ")
-        for i, audio, in enumerate(download_formats, start=1):
-            print(f"{i}{audio.abr} - {bytes_to_mb(audio.filesize)} MB")
+        for i, audio in enumerate(download_formats, start=1):
+            print(f"[{i}]- {audio.abr} - {bytes_to_mb(audio.filesize)} MB")
     while True:
                 try:
                     user_choice = int(input("Type the corresponding number to select a resolution."))
@@ -116,9 +124,29 @@ def convert_to_mp3(input_path):
         subprocess.run(["ffmpeg","-y","-i",input_path,"-acodec","libmp3lame",output_path],check=True)
         os.remove(input_path)
         print("MP3 conversion sucessfull.")
+        return output_path
     except subprocess.CalledProcessError:
         print("Error in the conversion")
         return input_path    
+# creates whisper model, base as parameter, can change in main if needed
+def whisper_model(model_name="base"):
+# checks cuda to know if it can use the gpu, if can't, uses the cpu to run the ai model
+    if torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+    print(f"Whisper model {model_name} running on {device}")
+    model = whisper.load_model(model_name).to(device)
+    return model
+
+# language as optional parameter, "en" or "pt" for example
+def audio_transcriber(model,file_path,language=None):
+    print(f"Transcribing audio: {file_path}")
+    if language:
+        transcription = model.transcribe(file_path,language=language)
+    else:
+        transcription = model.transcribe(file_path)
+    return transcription["text"]
 
 
 main()
