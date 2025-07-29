@@ -1,5 +1,6 @@
 import whisper
 import torch
+import whisper.utils
 from media import convert_to_mp3
 # creates whisper model, base as parameter, can change in main if needed
 
@@ -11,20 +12,35 @@ def whisper_model(model_name="base"):
     else:
         device = "cpu"
     print(f"Whisper model {model_name} running on {device}")
-    model = whisper.load_model(model_name).to(device)
-    return model
+    try:    
+        model = whisper.load_model(model_name).to(device)
+        return model
+    except Exception as erro:
+        print(f"Failed to load whisper {model_name}\n{erro}")
+        return None
 
 # language as optional parameter, "en" or "pt" for example
 def audio_transcriber(model,file_path,language=None):
     print(f"Transcribing audio: {file_path}")
-    if language:
-        transcription = model.transcribe(file_path,language=language)
-    else:
-        transcription = model.transcribe(file_path)
-    return transcription["text"]
+    try:
+        if language:
+            transcription = model.transcribe(file_path,language=language)
+        else:
+            transcription = model.transcribe(file_path)
+        return transcription["text"]
+    except Exception as erro:
+        print(f" Audio transcription has failed.\n {erro}")
+        return None
 
 def convert_and_transcribe(file_path,model_size="base",language=None):
     file_path = convert_to_mp3(file_path)
+    if not file_path:
+        print("Mp3 conversion failed")
+        return None,None
     model = whisper_model(model_size)
+    if model is None:
+        print("Whisper model couldn't be loaded.")
+        return None,None
     transcription = audio_transcriber(model,file_path,language=language)
     return file_path,transcription
+
